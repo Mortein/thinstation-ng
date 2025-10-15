@@ -2,7 +2,7 @@
 
 . /etc/thinstation.global
 
-if ! is_enabled $XFWM4_KIOSK: then
+if ! is_enabled $XFWM4_KIOSK ; then
 	until pgrep -f libsystray &>/dev/null ; do
 		sleep .2
 	done
