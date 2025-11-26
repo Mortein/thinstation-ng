@@ -6,3 +6,4 @@ base-nss
 bash
 crypto-policies
 libbpf
+libgcc
