@@ -1,3 +1,4 @@
 #hdupdate 20
 
 chmod +x /etc/init.d/hdupdate
+systemctl enable hdupdate
