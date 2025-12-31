@@ -1,0 +1,123 @@
+/* ---------------------------------- */
+QLabel {
+    font-size: 12px;
+}
+
+QLabel#category {
+    font-weight: bold;
+    font-size: 14px;
+    margin-top: 10px;
+    margin-bottom: 4px;
+}
+
+QLabel#description {
+    font-size: 11px;
+}
+
+QLabel#option_label {
+    font-size: 12px;
+}
+
+QLabel#global_options_label {
+    font-size: 16px;
+    font-weight: bold;
+}
+
+/* ---------------------------------- */
+/* QPushButton */
+QPushButton {
+    background-color: #4CAF50;
+    color: black;
+    border: none;
+    padding: 3px 6px;
+    border-radius: 4px;
+    font-size: 12px;
+}
+
+QPushButton:hover {
+    background-color: #45a049;
+}
+
+QPushButton:pressed {
+    background-color: #3e8e41;
+}
+
+QPushButton:disabled {
+    color: gray;
+    background-color: #dddddd;
+    border: 1px solid #cccccc;
+}
+
+/* ---------------------------------- */
+QCheckBox {
+    font-size: 12px;
+}
+
+QCheckBox#option_checkbox {
+    font-size: 12px;
+}
+
+QCheckBox#selection_checkbox{
+    font-size: 12px;
+}
+
+/* ---------------------------------- */
+QComboBox {
+    padding: 2px;
+    font-size: 12px;
+}
+
+QComboBox#dropdown {
+    padding: 10px;
+    font-size: 12px;
+}
+
+/* ---------------------------------- */
+QLineEdit {
+    padding: 2px;
+    font-size: 12px;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+}
+
+QLineEdit#text_input {
+    padding: 2px;
+    font-size: 12px;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+}
+
+/* ---------------------------------- */
+QSpinBox, QDoubleSpinBox {
+    padding: 2px 4px;
+    font-size: 12px;
+}
+
+QSpinBox#number_input, QDoubleSpinBox#number_input {
+    padding: 2px 4px;
+    font-size: 12px;
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    left: 10px;
+    padding: 0 3px;
+    font-weight: bold;
+}
+
+/* ---------------------------------- */
+/* Scroll area */
+QScrollArea QWidget {
+    padding: 6px;
+}
+
+/* ---------------------------------- */
+/* Placeholders */
+QToolButton {}
+QRadioButton {}
+QTabWidget {}
+QTabBar {}
+QSlider {}
+QProgressBar {}
+QFrame {}
+QScrollBar {}
