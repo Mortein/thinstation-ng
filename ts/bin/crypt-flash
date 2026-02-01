@@ -34,11 +34,11 @@ parted $DISK --script name 2 SafeStore  # Set the PARTLABEL to 'SafeStore'
 
 # Setup LUKS encryption on the new partition
 echo -n "${USER_TOKEN}" | cryptsetup luksFormat -q --force-password ${DISK}${p}2 -
-cryptsetup token import --token-id 0 /dev/loop0p2 --json-file /ts/etc/user_token.json
+cryptsetup token import --token-id 0 ${DISK}${p}2 --json-file /ts/etc/user_token.json
 
 if [ -n "${ADMIN_TOKEN}" ]; then
 	echo -en "${USER_TOKEN}\n${ADMIN_TOKEN}" |cryptsetup luksAddKey -q --force-password ${DISK}${p}2 --key-slot 1 -
-	cryptsetup token import --token-id 1 /dev/loop0p2 --json-file /ts/etc/admin_token.json
+	cryptsetup token import --token-id 1 ${DISK}${p}2 --json-file /ts/etc/admin_token.json
 fi
 
 # Open the encrypted LUKS partition
@@ -83,7 +83,9 @@ mount $DISK${p}1 /mnt
 cp -a /build/boot-images/grub/efi-source/* /mnt
 umount /mnt
 
-losetup -d $loop
+if [ -n $loop ]; then
+	losetup -d $loop
+fi
 
 # Configure crypttab using PARTLABEL
 #echo 'cryptdisk PARTLABEL=SafeStore none luks,discard' | tee /etc/crypttab
