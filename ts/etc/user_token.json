@@ -1,6 +1,6 @@
 {
   "type": "luks2",
-  "keyslots": ["1"],
+  "keyslots": ["0"],
   "token": {
     "type": "custom",
     "data": {
