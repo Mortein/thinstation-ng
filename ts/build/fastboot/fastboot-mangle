@@ -85,8 +85,12 @@ if [ "$2" == "true" ] ; then
 		hardlink lib64
 	fi
 	mksquashfs lib64 ../$INITDIR/lib.squash -always-use-fragments -no-recovery -noappend $FB_COMP_EXTRA
-	for i in `ls --color=never lib64/ |grep -xvf ../fastboot/lib-boot |grep -xvf /tmp/fastlib |grep -Ewv 'bin|sbin|dbus-1' |grep -Ev 'libgcc_s.so.[0-1]+|libnss_files.so.[0-9]+|libnss_dns.so.[0-9]+'` ; do
-		if [ -n "$i" ] ; then
+	rm -rf lib64/fontconfig
+	rm -rf lib64/fonts
+	ln -sf /fastboot/fontconfig lib64/fontconfig
+	ln -sf /fastboot/fonts lib64/fonts
+	for i in `ls --color=never lib64/ |grep -xvf ../fastboot/lib-boot |grep -xvf /tmp/fastlib |grep -Ewv 'bin|sbin|dbus-1|fonts|fontconfig' |grep -Ev 'libgcc_s.so.[0-1]+|libnss_files.so.[0-9]+|libnss_dns.so.[0-9]+'` ; do
+		if [ -n "$i" ]; then
 			rm -rf lib64/$i
 		fi
 	done
@@ -102,7 +106,7 @@ if [ "$2" == "true" ] ; then
 	done
 	cd ..
 	echo -e "\tRe-Linking BusyBox\n"
-	chroot ./tmp-tree /sbin/busybox.shared --install -s
+	chroot ./tmp-tree /bin/busybox.shared --install -s
 	cd tmp-tree
 fi
 if [ "$2" == "lotsofmem" ]; then
@@ -128,12 +132,12 @@ if [ "$2" == "lotsofmem" ]; then
 		fi
 	done
 	for i in `ls --color=never bin/ |grep -xvf ../fastboot/bin-boot` ; do
-		if [ -n "$i" ] && [ "`readlink bin/$i`" != "/sbin/busybox.shared" ]; then
+		if [ -n "$i" ] && [ "`readlink bin/$i`" != "/bin/busybox.shared" ]; then
 			mv bin/$i ../fastboot-tmp/bin/.
 		fi
 	done
 	for i in `ls --color=never sbin/ |grep -xvf ../fastboot/bin-boot` ; do
-		if [ -n "$i" ] && [ "`readlink sbin/$i`" != "/sbin/busybox.shared" ]; then
+		if [ -n "$i" ] && [ "`readlink sbin/$i`" != "/bin/busybox.shared" ]; then
 			mv sbin/$i ../fastboot-tmp/sbin/.
 		fi
 	done

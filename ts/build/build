@@ -1826,7 +1826,7 @@ filesystem_fixups()
 		depmod -b ./tmp-tree $KERNVER 2>/dev/null
 	fi
 	# Clean up unncessary folders
-	rm -rf ./tmp-tree/{dependencies,build,.dna,.wind,.unwind}
+	rm -rf ./tmp-tree/{dependencies,build,.dna,.wind,.unwind,configurator.yaml,session_configurator.yaml}
 
 	# Sort the auth files
 	pwck -s -R /build/tmp-tree

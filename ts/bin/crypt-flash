@@ -1,93 +1,146 @@
 #!/bin/bash
+set -euo pipefail
 
-USER_TOKEN="useruser"
-ADMIN_TOKEN="adminadmin" # Comment out to only have a user token
+USER_TOKEN_JSON="/ts/etc/user_token.json"
+ADMIN_TOKEN_JSON="/ts/etc/admin_token.json"
 
-if [ -z "$1" ]; then
-	rm -f /thinstation.img
-	truncate -s 12G /thinstation.img
+IMG="/thinstation.img"
+IMG_SIZE="12G"
 
-	loop=`losetup -f`
-	losetup -P $loop /thinstation.img
+die(){ echo "ERROR: $*" >&2; exit 1; }
+need(){ command -v "$1" >/dev/null 2>&1 || die "Missing required command: $1"; }
 
-	# Define the disk to use
-	DISK="$loop"
+need parted; need cryptsetup; need losetup; need truncate; need mkfs.vfat
+need pvcreate; need vgcreate; need lvcreate; need mkfs.ext4; need lsblk
+
+if [[ $EUID -ne 0 ]]; then
+  die "Must run as root."
+fi
+
+# ---- Pick disk or loop fallback ----
+loop=""
+if [ -z "${1:-}" ]; then
+  rm -f "$IMG"
+  truncate -s "$IMG_SIZE" "$IMG"
+  loop="$(losetup -f)"
+  losetup -P "$loop" "$IMG"
+  DISK="$loop"
 else
-	DISK="$1"
+  DISK="$1"
 fi
 
-if echo $DISK |grep -q -E 'nvme|loop'; then p=p; else unset p; fi
+[ -b "$DISK" ] || die "Not a block device: $DISK"
 
-# Unmount disk if it's currently mounted (be very cautious with this command)
-umount ${DISK}* 2>/dev/null
+# Partition suffix: nvme0n1p1 / loop0p1 / mmcblk0p1 etc.
+p=""
+[[ "$DISK" =~ [0-9]$ ]] && p="p"
 
-# Create new partition table
-parted $DISK --script mklabel gpt
+# ---- Interactive token entry ----
+read -r -s -p "Enter USER LUKS passphrase (required): " USER_TOKEN
+echo
+[ -n "$USER_TOKEN" ] || die "USER passphrase cannot be empty."
 
-# Create a 2GB FAT partition for boot
-parted $DISK --script mkpart primary fat32 1MiB 2GiB
-mkfs.vfat -F 32 ${DISK}${p}1 -n boot
+read -r -s -p "Enter ADMIN LUKS passphrase (optional, press Enter to skip): " ADMIN_TOKEN
+echo
 
-# Create a LUKS partition that takes the rest of the disk from 2GiB onward
-parted $DISK --script mkpart primary 2GiB 100%
-parted $DISK --script name 2 SafeStore  # Set the PARTLABEL to 'SafeStore'
+# ---- Unmount anything mounted from this disk ----
+mapfile -t mps < <(lsblk -nrpo MOUNTPOINT "$DISK" | awk 'NF')
+for mp in "${mps[@]}"; do
+  umount "$mp" || true
+done
 
-# Setup LUKS encryption on the new partition
-echo -n "${USER_TOKEN}" | cryptsetup luksFormat -q --force-password ${DISK}${p}2 -
-cryptsetup token import --token-id 0 ${DISK}${p}2 --json-file /ts/etc/user_token.json
+# ---- Partitioning ----
+parted "$DISK" --script mklabel gpt
 
-if [ -n "${ADMIN_TOKEN}" ]; then
-	echo -en "${USER_TOKEN}\n${ADMIN_TOKEN}" |cryptsetup luksAddKey -q --force-password ${DISK}${p}2 --key-slot 1 -
-	cryptsetup token import --token-id 1 ${DISK}${p}2 --json-file /ts/etc/admin_token.json
+# 2GiB FAT32 (ESP/boot)
+parted "$DISK" --script mkpart primary fat32 1MiB 2GiB
+parted "$DISK" --script set 1 esp on
+
+# LUKS partition (rest)
+parted "$DISK" --script mkpart primary 2GiB 100%
+parted "$DISK" --script name 2 SafeStore
+
+partprobe "$DISK" || true
+#udevadm settle || true
+
+mkfs.vfat -F 32 "${DISK}${p}1" -n boot
+
+# ---- LUKS format (user passphrase) ----
+printf '%s' "$USER_TOKEN" | cryptsetup luksFormat -q --type luks2 --pbkdf pbkdf2 --batch-mode --force-password "${DISK}${p}2" --key-file -
+
+# Import user token JSON (if present)
+if [ -f "$USER_TOKEN_JSON" ]; then
+  cryptsetup token import --token-id 0 "${DISK}${p}2" --json-file "$USER_TOKEN_JSON"
+else
+  echo "Warning: missing $USER_TOKEN_JSON, skipping user token import" >&2
 fi
 
-# Open the encrypted LUKS partition
-echo -n "${USER_TOKEN}" | cryptsetup open ${DISK}${p}2 cryptdisk -
+# ---- Optional ADMIN key add (no temp files) ----
+if [ -n "$ADMIN_TOKEN" ]; then
+  if cryptsetup luksAddKey --help 2>&1 | grep -q -- '--new-keyfile'; then
+    # Provide old key then new key on stdin in that order
+    {
+      printf '%s\n' "$USER_TOKEN"
+      printf '%s' "$ADMIN_TOKEN"
+    } | cryptsetup luksAddKey "${DISK}${p}2" \
+        --key-file - \
+	--type luks2 \
+	--pbkdf pbkdf2 \
+	--force-password \
+        --new-keyfile - \
+        --key-slot 1 \
+        --batch-mode
+  else
+    # Fallback (prompt-driven) – depends on cryptsetup prompt order
+    {
+      printf '%s\n' "$USER_TOKEN"
+      printf '%s\n' "$ADMIN_TOKEN"
+      printf '%s\n' "$ADMIN_TOKEN"
+    } | cryptsetup luksAddKey --type luks2 --pbkdf pbkdf2 --force-password "${DISK}${p}2" --key-slot 1 --batch-mode
+  fi
 
-# Set up LVM on the encrypted partition
+  if [ -f "$ADMIN_TOKEN_JSON" ]; then
+    cryptsetup token import --token-id 1 "${DISK}${p}2" --json-file "$ADMIN_TOKEN_JSON"
+  else
+    echo "Warning: missing $ADMIN_TOKEN_JSON, skipping admin token import" >&2
+  fi
+fi
+
+# ---- Open LUKS (user passphrase) ----
+printf '%s' "$USER_TOKEN" | cryptsetup open "${DISK}${p}2" cryptdisk --key-file - --batch-mode
+
+# ---- LVM ----
 pvcreate /dev/mapper/cryptdisk
 vgcreate vg_crypt /dev/mapper/cryptdisk
 
-# Create logical volumes within the encrypted volume group
-lvcreate -L 1G -n lv_prstnt vg_crypt  # 1GB for the first volume
-lvcreate -L 2G -n lv_log vg_crypt  # 2GB for a log volume, adjust size as needed
-lvcreate -L 1G -n lv_root vg_crypt
-lvcreate -L 4G -n lv_home vg_crypt
+lvcreate -L 1G -n lv_prstnt vg_crypt
+lvcreate -L 2G -n lv_log    vg_crypt
+lvcreate -L 1G -n lv_root   vg_crypt
+lvcreate -L 4G -n lv_home   vg_crypt
 lvcreate -l 100%FREE -n lv_tsdev vg_crypt
 
-# Create filesystems on the logical volumes
 mkfs.ext4 /dev/vg_crypt/lv_prstnt
 mkfs.ext4 /dev/vg_crypt/lv_log
 mkfs.ext4 /dev/vg_crypt/lv_root
 mkfs.ext4 /dev/vg_crypt/lv_home
 mkfs.ext4 /dev/vg_crypt/lv_tsdev
 
-# Label the filesystems
 e2label /dev/vg_crypt/lv_prstnt prstnt
-e2label /dev/vg_crypt/lv_log log
-e2label /dev/vg_crypt/lv_root root
-e2label /dev/vg_crypt/lv_home home
-e2label /dev/vg_crypt/lv_tsdev tsdev
+e2label /dev/vg_crypt/lv_log    log
+e2label /dev/vg_crypt/lv_root   root
+e2label /dev/vg_crypt/lv_home   home
+e2label /dev/vg_crypt/lv_tsdev  tsdev
 
-# Inform LVM that we are about to close the volume group
-lvchange -an /dev/vg_crypt/lv_prstnt
-lvchange -an /dev/vg_crypt/lv_log
-lvchange -an /dev/vg_crypt/lv_root
-lvchange -an /dev/vg_crypt/lv_home
-lvchange -an /dev/vg_crypt/lv_tsdev
-
-# Close the LUKS partition
+# ---- Close up ----
+vgchange -an vg_crypt || true
 cryptsetup close cryptdisk
 
-mount $DISK${p}1 /mnt
+mount "${DISK}${p}1" /mnt
 cp -a /build/boot-images/grub/efi-source/* /mnt
 umount /mnt
 
-if [ -n $loop ]; then
-	losetup -d $loop
+if [ -n "${loop:-}" ]; then
+  losetup -d "$loop"
 fi
-
-# Configure crypttab using PARTLABEL
-#echo 'cryptdisk PARTLABEL=SafeStore none luks,discard' | tee /etc/crypttab
 
 echo "Partitioning, LUKS, and LVM setup complete."
