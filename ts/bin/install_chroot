@@ -154,7 +154,7 @@ install_binary_port()
 	Pkgfile=$1
 	if ! install_port $Pkgfile; then
 		port_name=`echo $Pkgfile |cut -d "/" -f6`
-		if ! $autodl; then
+		if ! $AUTODL; then
 			answered=false
 			while ! $answered; do
 				printf "Would you like to try and build it now? Y/N:"
@@ -225,8 +225,8 @@ export -f unwind_package
 export -f install_port
 export -f install_binary_port
 
-if [ -z "$autodl" ]; then
-	autodl=false
+if [ -z "$AUTODL" ]; then
+	AUTODL=false
 fi
 
 ROOT=$PWD
