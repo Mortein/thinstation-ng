@@ -1,0 +1,11 @@
+/*/bin
+/*/build/extra/bin
+/*/build/installed
+/*/build/scripts
+/*/etc
+/*/lib
+/*/lib64
+/*/libexec
+/*/linuxrc
+/*/sbin
+/*/var
